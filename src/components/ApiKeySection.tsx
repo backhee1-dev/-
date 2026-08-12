@@ -44,9 +44,20 @@ export const ApiKeySection: React.FC<ApiKeySectionProps> = ({
         text: res.message || '✅ Gemini API Key 유효성 검증 및 승인이 완료되었습니다!',
       });
     } else {
+      let errText = res.error || '유효하지 않거나 권한이 없는 Gemini API Key입니다.';
+      if (
+        errText.includes('{') ||
+        errText.includes('error') ||
+        errText.includes('code') ||
+        errText.includes('404') ||
+        errText.includes('models/') ||
+        errText.includes('API Key 검증 오류')
+      ) {
+        errText = '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.';
+      }
       setFeedback({
         type: 'error',
-        text: res.error || '❌ 유효하지 않은 API Key입니다.',
+        text: errText,
       });
     }
   };

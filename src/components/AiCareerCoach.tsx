@@ -156,7 +156,18 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
       soundFx.playSuccessSound();
       setInlineFeedback(null);
     } else {
-      setInlineFeedback(res.error || '유효하지 않은 API Key입니다.');
+      let errText = res.error || '유효하지 않거나 권한이 없는 Gemini API Key입니다.';
+      if (
+        errText.includes('{') ||
+        errText.includes('error') ||
+        errText.includes('code') ||
+        errText.includes('404') ||
+        errText.includes('models/') ||
+        errText.includes('API Key 검증 오류')
+      ) {
+        errText = '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.';
+      }
+      setInlineFeedback(errText);
     }
   };
 
