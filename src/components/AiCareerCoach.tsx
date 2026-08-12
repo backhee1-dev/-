@@ -35,7 +35,10 @@ export const AiCareerCoach: React.FC<AiCareerCoachProps> = ({
     setIsLoading(true);
     setErrorMsg(null);
 
+    let generatedText = '';
+
     try {
+      // 1. Try server API route
       const res = await fetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -47,19 +50,72 @@ export const AiCareerCoach: React.FC<AiCareerCoachProps> = ({
         }),
       });
 
-      const data = await res.json();
-
-      if (res.ok && data.success && data.analysis) {
-        soundFx.playSuccessSound();
-        setAnalysis(data.analysis);
-      } else {
-        setErrorMsg(data.error || 'AI 커리어 분석을 생성하지 못했습니다. 다시 시도해 주세요.');
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (res.ok && data.success && data.analysis) {
+          generatedText = data.analysis;
+        } else if (data.error) {
+          setErrorMsg(data.error);
+          setIsLoading(false);
+          return;
+        }
       }
-    } catch (err) {
-      setErrorMsg('서버 네트워크 연결 오류가 발생했습니다. 인터넷 연결을 확인해 주세요.');
-    } finally {
-      setIsLoading(false);
+    } catch (e) {
+      // Ignore server route error and fallback to client-side call
     }
+
+    // 2. Client-side SDK Fallback if server route did not return text
+    if (!generatedText && apiKey) {
+      try {
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+        const prompt = `당신은 대한민국 최고 명성의 커리어 컨설턴트이자 HR 인사 전략 전문가입니다.
+사용자가 '커리어 밸런스 게임'을 완료하였으며 진단 결과는 다음과 같습니다:
+
+[사용자 진단 프로필]
+- 커리어 유형: ${resultTitle || "커리어 모험가"}
+- 서브 타이틀: ${resultSubtitle || "일하는 스타일 진단 완료"}
+${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selectedAnswers)}` : ""}
+
+위 성향 데이터를 바탕으로 사용자에게 실질적인 도움을 주는 [맞춤형 커리어 코칭 및 스케일업 분석 리포트]를 작성해 주세요.
+반드시 아래 4개 파트를 구체적이고 다정한 마크다운(Markdown) 문서 형태로 구성해 주세요:
+
+### 🌟 1. 나만의 핵심 업무 강점 분석
+- 이 캐릭터가 실제 조직과 업무 현장에서 발휘하는 차별화된 핵심 능력 3가지
+
+### 🏢 2. 최적의 조직 문화 & 추천 직무
+- 주도성을 높일 수 있는 조직 분위기와 시너지를 발휘할 만한 직무 분야
+
+### 📝 3. 자기소개서 & 면접 핵심 어필 팁
+- 서류 작성 및 면접 시 나만의 일하는 스타일을 강점으로 호감 있게 전달하는 구체적 문장 예시
+
+### 🚀 4. 커리어 스케일업 성장 가이드
+- 직장생활과 장기 커리어 발전 과정에서 기억해야 할 따뜻하고 실용적인 조언`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+
+        if (response && response.text) {
+          generatedText = response.text;
+        }
+      } catch (clientErr: any) {
+        setErrorMsg(`AI 커리어 분석 생성 중 오류가 발생했습니다: ${clientErr?.message || ''}`);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    if (generatedText) {
+      soundFx.playSuccessSound();
+      setAnalysis(generatedText);
+    } else if (!errorMsg) {
+      setErrorMsg('AI 커리어 분석을 생성하지 못했습니다. 다시 시도해 주세요.');
+    }
+
+    setIsLoading(false);
   };
 
   const handleInlineActivate = async (e: React.FormEvent) => {

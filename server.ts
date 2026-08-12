@@ -3,6 +3,57 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
+// Helper function to generate content using standard public models with fallback
+async function generateGeminiContent(ai: GoogleGenAI, prompt: string) {
+  // Standard public models for Google AI Studio API keys (ai.google.dev)
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.5-pro",
+    "gemini-3.6-flash",
+  ];
+
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+
+      if (response && response.text) {
+        return response.text;
+      }
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.status || err?.statusCode;
+      const msg = String(err?.message || "");
+
+      // If it is explicitly an authentication/authorization error, do NOT retry other models
+      if (
+        status === 401 ||
+        status === 403 ||
+        msg.includes("API_KEY_INVALID") ||
+        msg.includes("API key not valid") ||
+        msg.includes("UNAUTHENTICATED") ||
+        msg.includes("PERMISSION_DENIED")
+      ) {
+        throw err;
+      }
+
+      // If model not found or invalid model name (e.g. 404 or 400 with model error), continue to next model
+      continue;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error("Gemini API 응답을 생성할 수 없습니다.");
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -23,22 +74,17 @@ async function startServer() {
 
       const clientKey = userApiKey.trim();
 
-      // Test key against Google Gemini API
+      // Test key against Google Gemini API using standard model sequence
       const ai = new GoogleGenAI({
         apiKey: clientKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build",
-          },
-        },
       });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: "Hello, Gemini! Key validation test.",
-      });
+      const textResult = await generateGeminiContent(
+        ai,
+        "Hello, Gemini! Key validation test."
+      );
 
-      if (response && response.text) {
+      if (textResult) {
         return res.json({
           success: true,
           message: "Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.",
@@ -50,19 +96,18 @@ async function startServer() {
         });
       }
     } catch (err: any) {
-      // Security Rule: NEVER log raw API key in console logs or error traces!
       const status = err?.status || err?.statusCode || 500;
       const message = String(err?.message || "");
 
       let userFriendlyMsg = "Gemini API Key 검증 중 오류가 발생했습니다.";
 
       if (
-        status === 400 ||
         status === 401 ||
         status === 403 ||
         message.includes("API_KEY_INVALID") ||
         message.includes("API key not valid") ||
-        message.includes("UNAUTHENTICATED")
+        message.includes("UNAUTHENTICATED") ||
+        message.includes("PERMISSION_DENIED")
       ) {
         userFriendlyMsg =
           "유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력한 키를 정확히 다시 확인해 주세요.";
@@ -80,6 +125,8 @@ async function startServer() {
       ) {
         userFriendlyMsg =
           "네트워크 연결 오류가 발생했습니다. 인터넷 연결 상태를 확인 후 다시 시도해 주세요.";
+      } else {
+        userFriendlyMsg = `API Key 검증 중 오류: ${message.slice(0, 120)}`;
       }
 
       return res.status(status >= 400 && status < 600 ? status : 500).json({
@@ -110,11 +157,6 @@ async function startServer() {
 
       const ai = new GoogleGenAI({
         apiKey: effectiveKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build",
-          },
-        },
       });
 
       const prompt = `당신은 대한민국 최고 명성의 커리어 컨설턴트이자 HR 인사 전략 전문가입니다.
@@ -140,13 +182,7 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
 ### 🚀 4. 커리어 스케일업 성장 가이드
 - 직장생활과 장기 커리어 발전 과정에서 기억해야 할 따뜻하고 실용적인 조언`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: prompt,
-      });
-
-      const analysisText =
-        response.text || "AI 분석 결과를 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      const analysisText = await generateGeminiContent(ai, prompt);
 
       return res.json({
         success: true,
@@ -159,7 +195,6 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
       let userFriendlyMsg = "AI 커리어 분석 생성 중 오류가 발생했습니다.";
 
       if (
-        status === 400 ||
         status === 401 ||
         status === 403 ||
         message.includes("API_KEY_INVALID")

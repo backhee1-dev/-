@@ -19,26 +19,72 @@ export default function App() {
   const [isKeyApproved, setIsKeyApproved] = useState<boolean>(false);
 
   const handleApproveKey = async (key: string) => {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return { success: false, error: 'Gemini API Key를 입력해 주세요.' };
+    }
+
     try {
+      // 1. Try server-side API proxy first
       const res = await fetch('/api/verify-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key }),
+        body: JSON.stringify({ apiKey: trimmedKey }),
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setApiKey(key);
+
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setApiKey(trimmedKey);
+          setIsKeyApproved(true);
+          return { success: true, message: data.message };
+        } else if (data.error) {
+          setIsKeyApproved(false);
+          return { success: false, error: data.error };
+        }
+      }
+
+      // 2. Client-side SDK Fallback (useful for Vercel Static deployment where /api endpoint is 404 HTML)
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: trimmedKey });
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'Hello, Gemini!',
+      });
+
+      if (response && response.text) {
+        setApiKey(trimmedKey);
         setIsKeyApproved(true);
-        return { success: true, message: data.message };
+        return {
+          success: true,
+          message: 'Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.',
+        };
       } else {
         setIsKeyApproved(false);
-        return { success: false, error: data.error || 'API Key 승인에 실패했습니다.' };
+        return { success: false, error: 'API Key 검증 응답에 실패했습니다. 올바른 키인지 확인해 주세요.' };
       }
-    } catch (err) {
+    } catch (err: any) {
+      const msg = String(err?.message || '');
       setIsKeyApproved(false);
+
+      if (
+        msg.includes('API_KEY_INVALID') ||
+        msg.includes('API key not valid') ||
+        msg.includes('UNAUTHENTICATED') ||
+        msg.includes('400') ||
+        msg.includes('403')
+      ) {
+        return {
+          success: false,
+          error: '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력한 Key를 다시 확인해 주세요.',
+        };
+      }
+
       return {
         success: false,
-        error: '서버 네트워크 통신 중 오류가 발생했습니다. 다시 시도해 주세요.',
+        error: `API Key 검증 오류: ${msg.slice(0, 100)}`,
       };
     }
   };
