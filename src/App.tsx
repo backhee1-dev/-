@@ -49,12 +49,35 @@ export default function App() {
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey: trimmedKey });
       
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: 'Hello, Gemini!',
-      });
+      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+      let lastErr: any = null;
+      let textResult = '';
 
-      if (response && response.text) {
+      for (const m of modelsToTry) {
+        try {
+          const res = await ai.models.generateContent({
+            model: m,
+            contents: 'Hello, Gemini! Key validation test.',
+          });
+          if (res && res.text) {
+            textResult = res.text;
+            break;
+          }
+        } catch (err: any) {
+          lastErr = err;
+          const msg = String(err?.message || '');
+          if (
+            msg.includes('API_KEY_INVALID') ||
+            msg.includes('API key not valid') ||
+            msg.includes('UNAUTHENTICATED') ||
+            msg.includes('PERMISSION_DENIED')
+          ) {
+            throw err;
+          }
+        }
+      }
+
+      if (textResult) {
         setApiKey(trimmedKey);
         setIsKeyApproved(true);
         return {
@@ -62,6 +85,7 @@ export default function App() {
           message: 'Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.',
         };
       } else {
+        if (lastErr) throw lastErr;
         setIsKeyApproved(false);
         return { success: false, error: 'API Key 검증 응답에 실패했습니다. 올바른 키인지 확인해 주세요.' };
       }

@@ -7,11 +7,9 @@ import { GoogleGenAI } from "@google/genai";
 async function generateGeminiContent(ai: GoogleGenAI, prompt: string) {
   // Standard public models for Google AI Studio API keys (ai.google.dev)
   const models = [
-    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash",
-    "gemini-2.5-pro",
-    "gemini-3.6-flash",
+    "gemini-1.5-pro",
   ];
 
   let lastError: any = null;

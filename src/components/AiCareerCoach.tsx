@@ -93,13 +93,28 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
 ### 🚀 4. 커리어 스케일업 성장 가이드
 - 직장생활과 장기 커리어 발전 과정에서 기억해야 할 따뜻하고 실용적인 조언`;
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
-
-        if (response && response.text) {
-          generatedText = response.text;
+        const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+        for (const m of modelsToTry) {
+          try {
+            const response = await ai.models.generateContent({
+              model: m,
+              contents: prompt,
+            });
+            if (response && response.text) {
+              generatedText = response.text;
+              break;
+            }
+          } catch (e: any) {
+            const msg = String(e?.message || '');
+            if (
+              msg.includes('API_KEY_INVALID') ||
+              msg.includes('API key not valid') ||
+              msg.includes('UNAUTHENTICATED') ||
+              msg.includes('PERMISSION_DENIED')
+            ) {
+              throw e;
+            }
+          }
         }
       } catch (clientErr: any) {
         setErrorMsg(`AI 커리어 분석 생성 중 오류가 발생했습니다: ${clientErr?.message || ''}`);
@@ -155,7 +170,7 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono font-bold text-yellow-400 uppercase tracking-widest bg-yellow-400/10 px-2.5 py-0.5 rounded-full border border-yellow-400/20">
-                  GEMINI 3.6 FLASH AI
+                  GEMINI 2.0 FLASH AI
                 </span>
                 {isKeyApproved && (
                   <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
