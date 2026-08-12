@@ -117,7 +117,12 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
           }
         }
       } catch (clientErr: any) {
-        setErrorMsg(`AI 커리어 분석 생성 중 오류가 발생했습니다: ${clientErr?.message || ''}`);
+        const cMsg = String(clientErr?.message || '');
+        if (cMsg.includes('RESOURCE_EXHAUSTED') || cMsg.includes('quota') || cMsg.includes('429')) {
+          setErrorMsg('API 호출 한도가 초과되었습니다 (429). 잠시 후 다시 시도해 주세요.');
+        } else {
+          setErrorMsg('유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.');
+        }
         setIsLoading(false);
         return;
       }

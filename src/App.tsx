@@ -41,7 +41,11 @@ export default function App() {
           return { success: true, message: data.message };
         } else if (data.error) {
           setIsKeyApproved(false);
-          return { success: false, error: data.error };
+          let cleanErr = data.error;
+          if (cleanErr.includes('{') || cleanErr.includes('error') || cleanErr.includes('code') || cleanErr.includes('models/')) {
+            cleanErr = '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.';
+          }
+          return { success: false, error: cleanErr };
         }
       }
 
@@ -85,30 +89,30 @@ export default function App() {
           message: 'Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.',
         };
       } else {
-        if (lastErr) throw lastErr;
         setIsKeyApproved(false);
-        return { success: false, error: 'API Key 검증 응답에 실패했습니다. 올바른 키인지 확인해 주세요.' };
+        return { success: false, error: '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.' };
       }
     } catch (err: any) {
       const msg = String(err?.message || '');
       setIsKeyApproved(false);
 
-      if (
-        msg.includes('API_KEY_INVALID') ||
-        msg.includes('API key not valid') ||
-        msg.includes('UNAUTHENTICATED') ||
-        msg.includes('400') ||
-        msg.includes('403')
-      ) {
+      if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || msg.includes('429')) {
         return {
           success: false,
-          error: '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력한 Key를 다시 확인해 주세요.',
+          error: 'API 호출 한도가 초과되었습니다 (429). 잠시 후 다시 시도해 주세요.',
+        };
+      }
+
+      if (msg.includes('fetch failed') || msg.includes('ENOTFOUND') || msg.includes('network')) {
+        return {
+          success: false,
+          error: '네트워크 연결 오류가 발생했습니다. 인터넷 연결 상태를 확인해 주세요.',
         };
       }
 
       return {
         success: false,
-        error: `API Key 검증 오류: ${msg.slice(0, 100)}`,
+        error: '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.',
       };
     }
   };

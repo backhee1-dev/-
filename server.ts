@@ -124,7 +124,8 @@ async function startServer() {
         userFriendlyMsg =
           "네트워크 연결 오류가 발생했습니다. 인터넷 연결 상태를 확인 후 다시 시도해 주세요.";
       } else {
-        userFriendlyMsg = `API Key 검증 중 오류: ${message.slice(0, 120)}`;
+        userFriendlyMsg =
+          "유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.";
       }
 
       return res.status(status >= 400 && status < 600 ? status : 500).json({
