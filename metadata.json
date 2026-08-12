@@ -1,0 +1,6 @@
+{
+  "name": "커리어 밸런스 게임",
+  "description": "다양한 직장생활 밸런스 옵션을 선택하여 나의 일하는 성향과 커리어 타입을 알아볼 수 있는 세련된 밸런스 게임 웹앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
