@@ -19,7 +19,11 @@ export default function App() {
   const [isKeyApproved, setIsKeyApproved] = useState<boolean>(false);
 
   const handleApproveKey = async (key: string) => {
-    const trimmedKey = key.trim();
+    const trimmedKey = (key || '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .trim()
+      .replace(/^['"]|['"]$/g, '');
+
     if (!trimmedKey) {
       return { success: false, error: 'Gemini API Key를 입력해 주세요.' };
     }
@@ -53,45 +57,15 @@ export default function App() {
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey: trimmedKey });
       
-      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
-      let lastErr: any = null;
-      let textResult = '';
+      // Validate key directly via models.list()
+      await ai.models.list();
 
-      for (const m of modelsToTry) {
-        try {
-          const res = await ai.models.generateContent({
-            model: m,
-            contents: 'Hello, Gemini! Key validation test.',
-          });
-          if (res && res.text) {
-            textResult = res.text;
-            break;
-          }
-        } catch (err: any) {
-          lastErr = err;
-          const msg = String(err?.message || '');
-          if (
-            msg.includes('API_KEY_INVALID') ||
-            msg.includes('API key not valid') ||
-            msg.includes('UNAUTHENTICATED') ||
-            msg.includes('PERMISSION_DENIED')
-          ) {
-            throw err;
-          }
-        }
-      }
-
-      if (textResult) {
-        setApiKey(trimmedKey);
-        setIsKeyApproved(true);
-        return {
-          success: true,
-          message: 'Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.',
-        };
-      } else {
-        setIsKeyApproved(false);
-        return { success: false, error: '유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.' };
-      }
+      setApiKey(trimmedKey);
+      setIsKeyApproved(true);
+      return {
+        success: true,
+        message: 'Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.',
+      };
     } catch (err: any) {
       const msg = String(err?.message || '');
       setIsKeyApproved(false);

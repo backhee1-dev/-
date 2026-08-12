@@ -93,7 +93,16 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
 ### 🚀 4. 커리어 스케일업 성장 가이드
 - 직장생활과 장기 커리어 발전 과정에서 기억해야 할 따뜻하고 실용적인 조언`;
 
-        const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+        const modelsToTry = [
+          'gemini-3.5-flash',
+          'gemini-3.6-flash',
+          'gemini-3.1-flash-lite',
+          'gemini-2.5-flash-lite',
+          'gemini-flash-latest',
+          'gemini-2.5-flash',
+          'gemini-2.5-pro',
+        ];
+
         for (const m of modelsToTry) {
           try {
             const response = await ai.models.generateContent({
@@ -114,6 +123,31 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
             ) {
               throw e;
             }
+          }
+        }
+
+        if (!generatedText) {
+          try {
+            const pager = await ai.models.list();
+            for await (const m of pager) {
+              const modelName = m.name.replace(/^models\//, '');
+              if (m.supportedActions && m.supportedActions.includes('generateContent')) {
+                try {
+                  const res = await ai.models.generateContent({
+                    model: modelName,
+                    contents: prompt,
+                  });
+                  if (res && res.text) {
+                    generatedText = res.text;
+                    break;
+                  }
+                } catch (e) {
+                  // continue
+                }
+              }
+            }
+          } catch (e) {
+            // ignore listing fallback error
           }
         }
       } catch (clientErr: any) {
@@ -186,7 +220,7 @@ ${selectedAnswers ? `- 주요 밸런스 선택 데이터: ${JSON.stringify(selec
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono font-bold text-yellow-400 uppercase tracking-widest bg-yellow-400/10 px-2.5 py-0.5 rounded-full border border-yellow-400/20">
-                  GEMINI 2.0 FLASH AI
+                  GEMINI 3.5 FLASH AI
                 </span>
                 {isKeyApproved && (
                   <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">

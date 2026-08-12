@@ -3,18 +3,31 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
+// Helper function to clean user input API Key (remove zero-width characters, surrounding quotes/whitespace)
+function sanitizeApiKey(rawKey: string): string {
+  if (!rawKey) return "";
+  return rawKey
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+}
+
 // Helper function to generate content using standard public models with fallback
 async function generateGeminiContent(ai: GoogleGenAI, prompt: string) {
   // Standard public models for Google AI Studio API keys (ai.google.dev)
-  const models = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+  const preferredModels = [
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
   ];
 
   let lastError: any = null;
 
-  for (const model of models) {
+  for (const model of preferredModels) {
     try {
       const response = await ai.models.generateContent({
         model,
@@ -29,7 +42,6 @@ async function generateGeminiContent(ai: GoogleGenAI, prompt: string) {
       const status = err?.status || err?.statusCode;
       const msg = String(err?.message || "");
 
-      // If it is explicitly an authentication/authorization error, do NOT retry other models
       if (
         status === 401 ||
         status === 403 ||
@@ -40,10 +52,31 @@ async function generateGeminiContent(ai: GoogleGenAI, prompt: string) {
       ) {
         throw err;
       }
-
-      // If model not found or invalid model name (e.g. 404 or 400 with model error), continue to next model
       continue;
     }
+  }
+
+  // Dynamic model fallback via ai.models.list()
+  try {
+    const pager = await ai.models.list();
+    for await (const m of pager) {
+      const modelName = m.name.replace(/^models\//, "");
+      if (m.supportedActions && m.supportedActions.includes("generateContent")) {
+        try {
+          const res = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+          });
+          if (res && res.text) {
+            return res.text;
+          }
+        } catch (e) {
+          // continue
+        }
+      }
+    }
+  } catch (e) {
+    // ignore listing fallback error
   }
 
   if (lastError) {
@@ -63,53 +96,41 @@ async function startServer() {
     try {
       const userApiKey = req.body?.apiKey || req.headers["x-gemini-api-key"];
 
-      if (!userApiKey || typeof userApiKey !== "string" || !userApiKey.trim()) {
+      if (!userApiKey || typeof userApiKey !== "string") {
         return res.status(400).json({
           success: false,
           error: "API Key를 입력해 주세요.",
         });
       }
 
-      const clientKey = userApiKey.trim();
+      const clientKey = sanitizeApiKey(userApiKey);
 
-      // Test key against Google Gemini API using standard model sequence
+      if (!clientKey) {
+        return res.status(400).json({
+          success: false,
+          error: "API Key를 입력해 주세요.",
+        });
+      }
+
+      // Verify key against Google Gemini API via ai.models.list()
       const ai = new GoogleGenAI({
         apiKey: clientKey,
       });
 
-      const textResult = await generateGeminiContent(
-        ai,
-        "Hello, Gemini! Key validation test."
-      );
+      // ai.models.list() validates the API key directly with Google servers
+      await ai.models.list();
 
-      if (textResult) {
-        return res.json({
-          success: true,
-          message: "Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.",
-        });
-      } else {
-        return res.status(400).json({
-          success: false,
-          error: "API Key 검증 응답에 실패했습니다. 올바른 키인지 확인해 주세요.",
-        });
-      }
+      return res.json({
+        success: true,
+        message: "Gemini API Key 유효성 검증 및 승인이 성공적으로 완료되었습니다.",
+      });
     } catch (err: any) {
       const status = err?.status || err?.statusCode || 500;
       const message = String(err?.message || "");
 
-      let userFriendlyMsg = "Gemini API Key 검증 중 오류가 발생했습니다.";
+      let userFriendlyMsg = "유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.";
 
       if (
-        status === 401 ||
-        status === 403 ||
-        message.includes("API_KEY_INVALID") ||
-        message.includes("API key not valid") ||
-        message.includes("UNAUTHENTICATED") ||
-        message.includes("PERMISSION_DENIED")
-      ) {
-        userFriendlyMsg =
-          "유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력한 키를 정확히 다시 확인해 주세요.";
-      } else if (
         status === 429 ||
         message.includes("RESOURCE_EXHAUSTED") ||
         message.includes("quota")
@@ -123,9 +144,6 @@ async function startServer() {
       ) {
         userFriendlyMsg =
           "네트워크 연결 오류가 발생했습니다. 인터넷 연결 상태를 확인 후 다시 시도해 주세요.";
-      } else {
-        userFriendlyMsg =
-          "유효하지 않거나 권한이 없는 Gemini API Key입니다. 입력하신 Key를 다시 확인해 주세요.";
       }
 
       return res.status(status >= 400 && status < 600 ? status : 500).json({
